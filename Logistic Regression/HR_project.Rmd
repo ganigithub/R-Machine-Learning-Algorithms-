@@ -1,0 +1,113 @@
+---
+title: "HR_project"
+author: "gani"
+date: "17/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##data_import
+``` {r data_import}
+train_hr = read.csv('C:/Users/ganesh/Documents/R files/Logistic Regression/aug_train.csv', na.strings = c('','', 'NA'))
+test_hr = read.csv('C:/Users/ganesh/Documents/R files/Logistic Regression/aug_test.csv', na.strings = c('','','NA'))
+
+dim(train_hr)
+dim(test_hr)
+
+head(train_hr)
+colSums(is.na(train_hr))
+colSums(is.na(test_hr))
+```
+
+##data preparation
+``` {r data_preparation}
+library(dplyr)
+combined_data = bind_rows(train_hr, test_hr)
+dim(combined_data)
+colSums(is.na(combined_data))
+
+combined_data$enrollee_id = NULL
+combined_data$city        = NULL
+dim(combined_data)
+
+#we create a vector having columns where we have to perform kNN to replace missing values i.e. NA's
+library(VIM)
+# gender, enrolled_university, education_level, major_discipline, experience, company_size, company_type, last_new_job
+vect1 = c('gender', 'enrolled_university', 'education_level', 'major_discipline', 'experience', 'company_size', 'company_type', 'last_new_job')
+imputed_data = kNN(combined_data, variable = vect1)
+
+final_data   = imputed_data[, 1:12]  #after 12th column, all columns are imputed (true, false) columns coz of kNN. we dont need them
+colSums(is.na(imputed_data))
+
+#converting target variable to factor
+final_data$target = as.factor(final_data$target)
+
+#split data
+train_hr_imputed = final_data[1:19158, ]
+test_hr_imputed  = final_data[19158:21287, ]
+head(final_data)
+```
+
+## split train in 75/25
+
+``` {r model_preparation}
+set.seed(200)
+index = sample(19158, 19158*0.75) #75% of train data
+
+train_data = train_hr_imputed[index, ]
+test_data  = train_hr_imputed[-index, ]
+dim(train_data)
+dim(test_data)
+
+table(train_data$target)
+```
+
+#sterwise regression
+``` {r model_building}
+null_hr_model = glm(target~1, data = train_data, family = 'binomial')
+full_hr_model = glm(target~., data = train_data, family = 'binomial')
+step(null_hr_model, direction = 'forward', scope = list(lower=null_hr_model, upper=full_hr_model))
+
+hr_model = glm(formula = target ~ city_development_index + relevent_experience + 
+                                  education_level + company_size + enrolled_university + company_type + 
+                                  experience + last_new_job + training_hours + gender,
+                                  family = "binomial", 
+                                  data = train_data)
+
+library(car)
+vif(hr_model)  #no multicolinearity since all values are less than 5
+
+pred_prob_training_data = predict(hr_model, train_data, type = 'response')
+library(ROCR)
+pred = prediction(pred_prob_training_data, train_data$target)
+perf = performance(pred, 'tpr', 'tnr')
+plot(perf, colorize = TRUE, print.cutoffs.at = seq(0.1, 1, 0.1))
+plot(perf, colorize = TRUE, print.cutoffs.at = seq(0.2, 0.3, 0.05))
+
+pred_target <- ifelse(pred_prob_training_data > 0.24 , '1','0')
+pred_target <- as.factor(pred_target)
+
+table(actual=train_data$target , predicted = pred_target)
+
+library(caret)
+confusionMatrix(pred_target, train_data$target, positive = '1')
+
+```
+
+``` {r cross_validation}
+pred_prob_testing_data = predict(hr_model, test_data, type='response')
+pred_target_test_data  = ifelse(pred_prob_testing_data > 0.24, '1','0')
+pred_target_test_data  = as.factor(pred_target_test_data)
+
+library(caret)
+confusionMatrix(pred_target_test_data, test_data$target, positive = '1')
+```
+
+
+```{r cross_validata_test_data}
+predicted_target     = predict(hr_model, test_hr_imputed)
+test_hr_imputed$pred_target = ifelse(predicted_target > 0.24, '1', '0')
+```

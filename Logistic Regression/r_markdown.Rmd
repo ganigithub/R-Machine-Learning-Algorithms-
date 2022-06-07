@@ -1,0 +1,133 @@
+---
+title: "Project2_rmarkdown"
+author: "gani"
+date: "16/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+### import data set
+
+how to create a chunk:
+
+```{r data_import}
+credit_risk = read.csv("C:/Users/ganesh/Documents/R files/Logistic Regression/credit_dataset_final.csv")
+dim(credit_risk)
+colSums(is.na(credit_risk))
+
+# no missing values present in data
+str(credit_risk)
+summary(credit_risk)
+
+# converting columns to factor:
+# int variables: credit.amount, credit.duration.month, age
+# rest all are factor
+
+vect1 = names(credit_risk); vect1
+vect1 = vect1[-c(3,6,14)] ; vect1  #we remove the variables that are int
+credit_risk[,vect1] = lapply(credit_risk[,vect1], as.factor)
+str(credit_risk)
+
+```
+
+## splitting data into test and train:
+
+``` {r data partition}
+library(caret)
+set.seed(200)
+index = createDataPartition(credit_risk$credit.rating, p = 0.75, list = FALSE) #list is false as we dont want o/p in list. p=75%
+
+train_credit_risk = credit_risk[index, ]
+test_credit_risk  = credit_risk[-index, ]
+dim(train_credit_risk)
+dim(test_credit_risk)
+
+summary(credit_risk$credit.rating)
+#in form of percentage
+a = table(credit_risk$credit.rating)
+prop.table(a)
+
+
+```
+
+stepwise regression and multicolinearity
+
+## traindata
+
+``` {r model_formation}
+null_credit_model = glm(credit.rating~1, data = train_credit_risk, family = 'binomial')
+full_credit_model = glm(credit.rating~., data = train_credit_risk, family = 'binomial')
+
+step(null_credit_model, direction = 'forward', scope = list(lower=null_credit_model, upper = full_credit_model))
+
+credit_risk_model = glm(formula = credit.rating ~ account.balance + credit.duration.months + 
+    previous.credit.payment.status + savings + credit.purpose + 
+    marital.status + installment.rate + apartment.type + residence.duration + 
+    foreign.worker + employment.duration + other.credits + credit.amount + 
+    telephone, family = "binomial", data = train_credit_risk)
+
+library(car)
+vif(credit_risk_model)
+#all variables have GVIF < 5. Hence model has no multicolinearity
+```
+
+``` {r model evaluation}
+#predicted probabilities
+pred_prob = predict(credit_risk_model, train_credit_risk, type = 'response')
+pred_CR   = ifelse(pred_prob > 0.5, '1', '0')
+pred_CR   = as.factor(pred_CR)
+
+#confusion matrix
+table(train_credit_risk$credit.rating, pred_CR)
+confusionMatrix(train_credit_risk$credit.rating, pred_CR)
+
+```
+
+##test data
+``` {r model_formation}
+null_credit_model = glm(credit.rating~1, data = test_credit_risk, family = 'binomial')
+full_credit_model = glm(credit.rating~., data = test_credit_risk, family = 'binomial')
+
+step(null_credit_model, direction = 'forward', scope = list(lower=null_credit_model, upper=full_credit_model))
+
+credit_risk_model = glm(formula = credit.rating ~ account.balance + credit.duration.months + 
+    savings + foreign.worker + previous.credit.payment.status + 
+    employment.duration + credit.purpose + credit.amount + age, 
+    family = "binomial", data = test_credit_risk)
+
+library(car)
+vif(credit_risk_model)
+
+#model evaluation
+pred_prob = predict(credit_risk_model, test_credit_risk, type = 'response')
+pred_CR   = ifelse(pred_prob > 0.5, '1', '0')
+pred_CR   = as.factor(pred_CR)
+
+#confusion matrix
+table(test_credit_risk$credit.rating, pred_CR)
+confusionMatrix(test_credit_risk$credit.rating, pred_CR)
+```

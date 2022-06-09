@@ -1,0 +1,108 @@
+---
+title: "HR"
+author: "gani"
+date: "30/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r import data and cleaning}
+hr_data = HR_Data
+str(hr_data)
+
+hr_data$EmployeeCount  = NULL
+hr_data$EmployeeNumber = NULL
+hr_data$Over18         = NULL
+hr_data$StandardHours  = NULL
+
+#converting few columns to factor
+vect1 = c('Education', 'EnvironmentSatisfaction', 'JobInvolvement', 'JobLevel', 'JobSatisfaction', 'PerformanceRating', 'RelationshipSatisfaction', 'StockOptionLevel', 'WorkLifeBalance')
+
+hr_data[, vect1] = lapply(hr_data[,vect1], factor)
+
+colSums(is.na(hr_data)) #no NA values
+```
+
+```{r model creation}
+
+#splitting in test and train
+set.seed(250)
+index = sample(nrow(hr_data), 0.75*nrow(hr_data))
+
+training_hr = hr_data[index,]
+testing_hr  = hr_data[-index,]
+
+#rpart
+library(rpart)
+library(rpart.plot)
+rmodel = rpart(Attrition~., data=training_hr)
+rpart.plot(rmodel, cex = 0.6)  #cex zooms plot or we can use tweak = 1.6
+
+#ctree
+library(partykit)
+tree_model <- ctree(Attrition~. ,data = training_hr)
+plot(tree_model,type="simple")
+```
+
+```{r upsampling}
+#since data is very biased,
+#upsampling
+library(caret)
+upsample <- upSample(hr_data, hr_data$Attrition)
+table(upsample$Attrition)
+upsample$Class= NULL
+
+index = sample(nrow(upsample), 0.75*nrow(upsample))
+train_data = upsample[index,]
+test_data  = upsample[-index,]
+
+table(train_data$Attrition)
+
+#now creating rpart model
+rpart_hr = rpart(Attrition~., data=train_data)
+rpart.plot(rpart_hr, cex=0.5)
+
+#ctree
+ctree_hr = ctree(Attrition~., data=train_data)
+plot(ctree_hr, type= 'simple')
+#too many brances. so stick to rapart.
+
+#predicting
+pred_attrition_rpart_hr = predict(rpart_hr, train_data, type='class')
+table(actual = train_data$Attrition, predicted = pred_attrition_rpart_hr)
+```
+
+
+########### Random Forest ################
+
+``` {r random forest}
+#install.packages('randomForest')
+library(randomForest)
+rfmodel = randomForest(Attrition~. , data = train_data, ntree=80)
+rfmodel
+
+#No. of variables tried at each split: 5  = sqrt of no of columns
+#OOB estimate of  error rate: 3.03%   = out of bag error,i.e error on unselected samples (average of class.error)
+
+plot(rfmodel)
+#green line = 1 / yes
+#red line  = 0 / no
+#black line = overall error/ overage (out of bag error average)
+
+#observe that error is constant after 80-100 trees. so no point in increasing trees beyond that
+#so we can decide ntree = 80-100
+
+predict_attrition_rf = predict(rfmodel, train_data)
+table(actual = train_data$Attrition, predicted = predict_attrition_rf)  #100% accuracy
+
+#we test our model on test data
+predict_attrition_test = predict(rfmodel, test_data)
+table(pred = predict_attrition_test, actual = test_data$Attrition)
+
+#testing on real unbiased data
+predict_attrition_full_data = predict(rfmodel, hr_data)
+table(actual = hr_data$Attrition, predicted = predict_attrition_full_data)
+```

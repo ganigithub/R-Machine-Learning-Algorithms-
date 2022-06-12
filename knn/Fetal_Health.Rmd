@@ -1,0 +1,64 @@
+---
+title: "fetal_health"
+author: "gani"
+date: "30/10/2021"
+output: html_document
+---
+
+### KNN (k nearest neighbour)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r data load and cleaning}
+
+summary(fetal_health)
+str(fetal_health)
+
+fetal_health$fetal_health = as.factor(fetal_health$fetal_health)
+
+quantile(fetal_health$severe_decelerations, probs= seq(0.9, 1, 0.01))  #since 99% values are 0, we can remove it
+fetal_health$severe_decelerations     = NULL
+d
+quantile(fetal_health$prolongued_decelerations, probs = seq(0.9, 1, 0.01))
+fetal_health$prolongued_decelerations = NULL
+```
+
+``` {r normalizing}
+#since we need to normalize all columns except fetal_health, we create the subset
+
+fetal_health_num = fetal_health
+fetal_health_num$fetal_health = NULL
+
+#standardizing values
+# x - min(x) / max(x) - min(x)
+
+#we create a standardizing function:
+
+standardizing = function(x){
+  return((x - min(x)) / (max(x) - min(x)))
+}
+
+fetal_health_stand    = fetal_health_num
+fetal_health_stand[,] = lapply(fetal_health_stand[,] , standardizing)
+summary(fetal_health_stand)
+```
+
+``` {r training and testing then knn}
+index    = sample(nrow(fetal_health_stand), 0.75*nrow(fetal_health_stand))
+train_FH = fetal_health_stand[index,]
+test_FH  = fetal_health_stand[-index,]
+
+y_train = fetal_health$fetal_health[index]
+y_test  = fetal_health$fetal_health[-index]
+
+
+library(class)
+
+k = sqrt(nrow(fetal_health)); k
+knn_model = knn(train_FH, test_FH, k=46, cl=y_train)  #cl if classification 
+knn_model  #the output we get is for test data
+
+table(actual = y_test, prediction = knn_model)
+```

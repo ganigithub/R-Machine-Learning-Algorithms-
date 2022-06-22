@@ -1,0 +1,44 @@
+---
+title: "breast_cancer"
+author: "gani"
+date: "31/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+``` {r loading}
+breast_cancer$X  = NULL
+breast_cancer$id = NULL
+
+standardize = function(x){
+  return((x-min(x)) / (max(x)-min(x)))
+}
+
+breast_cancer_stand = breast_cancer
+breast_cancer_stand[,2:31] = lapply(breast_cancer_stand[,2:31], standardize)
+
+summary(breast_cancer_stand)
+```
+
+``` {r LDA}
+
+# Linear Discriminative Analysis
+
+#independent variables should be numerical
+#independent and dependent variables must have linear relationship
+#can be used for dimension reduction. (to reduce complexity in model)
+
+#install.packages("MASS")
+library(MASS)   #for Modern Applied Statistics with S
+
+lda_cancer_model = lda(diagnosis~. , data = breast_cancer_stand)
+lda_cancer_model
+
+lda_pred = predict(lda_cancer_model, breast_cancer_stand)
+lda_pred$class    #predict function creates multiple answers, and what we need is in class
+
+table(actual = breast_cancer_stand$diagnosis, predicted = lda_pred$class)
+```

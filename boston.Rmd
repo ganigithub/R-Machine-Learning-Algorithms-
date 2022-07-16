@@ -1,0 +1,143 @@
+---
+title: "boston housing"
+author: "gani"
+date: "30/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load data}
+colSums(is.na(boston))
+summary(boston)
+str(boston)
+
+boston$CHAS = NULL #since all are 0 or false
+
+index = sample(nrow(boston), 0.75*nrow(boston))
+train_boston = boston[index,]
+test_boston  = boston[-index,]
+
+dim(train_boston)
+dim(test_boston)
+```
+
+``` {r linear model}
+
+#fixing outliers
+BOSTON = boston
+
+boxplot(BOSTON$MEDV)
+IQR = IQR(BOSTON$MEDV)  #7.975
+quantile(BOSTON$MEDV)
+
+UW = 25+(1.5*IQR); UW #44.095
+BOSTON$MEDV[BOSTON$MEDV > UW] = UW
+boxplot(BOSTON$MEDV)
+
+#model
+boston_lm = lm(MEDV~. , data = BOSTON)
+boston_lm
+
+#checking correlation
+library(corrplot)
+#generate cor matrix
+cor_matrix = cor(BOSTON)
+cor_matrix
+corrplot(cor_matrix, method='circle', type='lower')
+
+#DIS is highly correlated with three independent variables; ask if we can remove it
+boston_new     = BOSTON
+boston_new$DIS = NULL
+boston_new_lm  = lm(MEDV~., data = boston_new)
+boston_new_lm
+
+summary(boston_lm)      #78% r value  (better)
+summary(boston_new_lm)  #75% r value
+
+#RMSE
+predicted_MEDV_lm <- predict(boston_lm, BOSTON)
+res               <- BOSTON$MEDV - predicted_MEDV_lm
+rmse_boston_lm    <- sqrt(mean(res^2))
+rmse_boston_lm # 3.499
+```
+
+``` {r ctree and rpart}
+#ctree:
+
+library(partykit)
+boston_tree = ctree(MEDV~., data= train_boston)
+plot(boston_tree, type='simple')
+
+#rmse for ctree
+predicted_ctree_medv = predict(boston_tree, train_boston)
+res_ctree = train_boston$MEDV - predicted_ctree_medv
+rmse_ctree = sqrt(mean(res_ctree^2)); rmse_ctree  #3.6416  (better)
+
+#rpart:
+
+library(rpart)
+library(rpart.plot)
+
+boston_rpart = rpart(MEDV~. , data = train_boston)
+boston_rpart
+rpart.plot(boston_rpart)
+
+#rmse for rpart
+predicted_rpart_medv = predict(boston_rpart, train_boston)
+res_rpart = train_boston$MEDV - predicted_rpart_medv
+rmse_rpart = sqrt(mean(res_rpart^2)); rmse_rpart  #4.2186
+
+```
+
+``` {r random forest}
+library(randomForest)
+boston_rf= randomForest(MEDV~., data = train_boston)
+boston_rf   #rmse = 3.3180 and % of var explained = 87.4
+
+plot(boston_rf)  #set ntree = 55-60
+
+
+predict_medv_rf = predict(boston_rf, train_boston)
+res_rf          = train_boston$MEDV - predict_medv_rf
+rmse_rf         = sqrt(mean(res_rf^2)); rmse_rf         #1.45 (different than boston_rf model rmse)
+
+```
+
+##KNN
+``` {r normalizing}
+#since we need to normalize all columns except fetal_health, we create the subset
+
+boston_num = boston
+boston_num$MEDV = NULL
+
+#we create a standardizing function:
+
+standardizing = function(x){
+  return((x - min(x)) / (max(x) - min(x)))
+}
+
+boston_stand = boston_num
+boston_stand[,] = lapply(boston_stand[,] , standardizing)
+summary(boston_stand)
+```
+
+``` {r training and testing then knn} 
+index   = sample(nrow(boston_stand), 0.75*nrow(boston_stand))
+train_b = boston_stand[index,]
+test_b  = boston_stand[-index,]
+
+y_train = boston$MEDV[index]
+y_test  = boston$MEDV[-index]
+
+k = sqrt(nrow(boston)); k
+
+library(caret)
+knn_model = knnregTrain(train_b,test_b,k=22, y=y_train)
+knn_model  #the output we get is for test data
+
+res  = y_test - knn_model
+rmse = sqrt(mean(res^2)); rmse   #6.07441
+```
